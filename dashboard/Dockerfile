@@ -1,26 +1,27 @@
+# Usamos Node 20 completo (sin -alpine) para evitar errores con Vite
 FROM node:20 AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copiamos los archivos de dependencias
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# ¡LA MAGIA ESTÁ AQUÍ! Instalamos ignorando conflictos de versiones
+RUN npm install --legacy-peer-deps
 
-# Copy source code
+# Copiamos el resto del código
 COPY . .
 
-# Build the app
+# Compilamos la aplicación
 RUN npm run build
 
-# Production stage with nginx
+# Etapa de producción con Nginx
 FROM nginx:alpine
 
-# Copy built files
+# Copiamos la web ya construida al servidor Nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config
+# Copiamos la configuración de Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
