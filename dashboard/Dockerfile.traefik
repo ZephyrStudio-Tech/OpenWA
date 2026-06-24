@@ -7,6 +7,10 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# La URL del API se incrusta en build (Vite). Easypanel la pasa como build-arg
+# desde el env del servicio (VITE_API_URL).
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # ===== Production: Lightweight static server =====
