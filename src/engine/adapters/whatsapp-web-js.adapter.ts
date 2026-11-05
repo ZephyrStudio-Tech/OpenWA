@@ -142,6 +142,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           clientId: this.config.sessionId,
           dataPath: path.resolve(this.config.sessionDataPath),
         }),
+        // whatsapp-web.js espera 30 s por defecto a que el socket de WhatsApp Web
+        // salga de OPENING/PAIRING. Al vincular un dispositivo nuevo el movil tarda
+        // mas en sincronizar, se agotaba el tiempo y la sesion acababa en LOGOUT.
+        authTimeoutMs: Number(process.env.WWEBJS_AUTH_TIMEOUT_MS) || 180000,
         puppeteer: {
           headless: this.config.puppeteer?.headless ?? true,
           args: puppeteerArgs,
