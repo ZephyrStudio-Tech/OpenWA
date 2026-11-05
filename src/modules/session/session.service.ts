@@ -61,7 +61,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     // (sin QR, con la sesion guardada). Se desactiva con SESSION_AUTO_START=false.
     const wereReady =
       (await this.sessionRepository.find({
-        where: { status: In([SessionStatus.READY, SessionStatus.AUTHENTICATING]) },
+        where: {
+          status: In([SessionStatus.READY, SessionStatus.AUTHENTICATING, SessionStatus.INITIALIZING]),
+        },
       })) ?? [];
 
     const result = await this.sessionRepository.update(
@@ -87,7 +89,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
             this.logger.error(`Auto-start failed for session ${session.name}: ${error.message}`, error.stack),
           );
         }
-      }, 5000);
+      }, 15000);
       timer.unref?.();
     }
   }
