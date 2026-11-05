@@ -41,11 +41,11 @@
     "@bull-board/nestjs": "^7.1.5",
     "@nestjs-modules/ioredis": "^2.0.2",
     "@nestjs/bullmq": "^11.0.4",
-    "@nestjs/common": "^11.1.21",
+    "@nestjs/common": "^11.2.8",
     "@nestjs/config": "^4.0.2",
-    "@nestjs/core": "^11.1.21",
-    "@nestjs/platform-express": "^11.1.21",
-    "@nestjs/platform-socket.io": "^11.1.21",
+    "@nestjs/core": "^11.2.8",
+    "@nestjs/platform-express": "^11.2.8",
+    "@nestjs/platform-socket.io": "^11.2.8",
     "@nestjs/swagger": "^11.4.3",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
@@ -72,7 +72,7 @@
     "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.1.21",
+    "@nestjs/testing": "^11.2.8",
     "@types/archiver": "^7.0.0",
     "@types/dockerode": "^4.0.1",
     "@types/express": "^5.0.0",
@@ -97,6 +97,12 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.59.3"
+  },
+  "overrides": {
+    "multer": "^2.5.0",
+    "sqlite3": {
+      "tar": "^7.5.22"
+    }
   },
   "jest": {
     "moduleFileExtensions": [
