@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
+import { Client, LocalAuth, MessageMedia, Message } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode';
 import * as path from 'path';
 import {
@@ -48,6 +48,34 @@ export interface WhatsAppWebJsConfig {
     url: string;
     type: 'http' | 'https' | 'socks4' | 'socks5';
   };
+}
+
+/**
+ * Thrown when whatsapp-web.js resolves a send call without returning the sent message.
+ *
+ * Since the WhatsApp Web update of July 2026 (MsgKey `_serialized` renamed to `$1`),
+ * whatsapp-web.js <= 1.34.7 resolves `sendMessage()` with `undefined` even though the
+ * message is usually delivered. We fail loudly instead of crashing with a TypeError, and
+ * warn that the message may already be in the chat so callers do not blindly retry.
+ */
+export class WhatsAppSendUnconfirmedError extends Error {
+  constructor(
+    public readonly operation: string,
+    public readonly chatId: string,
+  ) {
+    super(
+      `WhatsApp Web did not return the sent message for ${operation} to ${chatId}: no message id. ` +
+        'The message may have been delivered anyway; check the chat before retrying.',
+    );
+    this.name = 'WhatsAppSendUnconfirmedError';
+  }
+}
+
+type SerializableId = { _serialized?: string; $1?: string } | null | undefined;
+
+/** Serialized WhatsApp id, tolerating the `_serialized` -> `$1` rename of July 2026. */
+export function serializeWaId(id: SerializableId): string | undefined {
+  return id?._serialized || id?.$1 || undefined;
 }
 
 export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngine {
@@ -144,7 +172,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     this.client.on('message', async msg => {
       try {
         const incomingMessage: IncomingMessage = {
-          id: msg.id._serialized,
+          id: serializeWaId(msg.id) ?? '',
           from: msg.from,
           to: msg.to,
           chatId: msg.from,
@@ -191,7 +219,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     });
 
     this.client.on('message_ack', (msg, ack) => {
-      this.callbacks.onMessageAck?.(msg.id._serialized, ack);
+      const messageId = serializeWaId(msg.id);
+      if (messageId) this.callbacks.onMessageAck?.(messageId, ack);
     });
 
     this.client.on('disconnected', reason => {
@@ -272,10 +301,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   async sendTextMessage(chatId: string, text: string): Promise<MessageResult> {
     this.ensureReady();
     const msg = await this.client!.sendMessage(chatId, text);
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return this.toSentMessageResult(msg, 'sendTextMessage', chatId);
   }
 
   async sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
@@ -316,10 +342,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       caption: media.caption,
     });
 
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return this.toSentMessageResult(msg, 'sendMediaMessage', chatId);
   }
 
   async getContacts(): Promise<Contact[]> {
@@ -391,10 +414,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       address: location.address || '',
     });
     const msg = await this.client!.sendMessage(chatId, loc);
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return this.toSentMessageResult(msg, 'sendLocationMessage', chatId);
   }
 
   async sendContactMessage(chatId: string, contact: ContactCard): Promise<MessageResult> {
@@ -411,10 +431,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const msg = await this.client!.sendMessage(chatId, vcard, {
       parseVCards: true,
     });
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return this.toSentMessageResult(msg, 'sendContactMessage', chatId);
   }
 
   async sendStickerMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
@@ -434,10 +451,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const msg = await this.client!.sendMessage(chatId, messageMedia, {
       sendMediaAsSticker: true,
     });
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return this.toSentMessageResult(msg, 'sendStickerMessage', chatId);
   }
 
   async replyToMessage(chatId: string, quotedMsgId: string, text: string): Promise<MessageResult> {
@@ -452,10 +466,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     }
 
     const msg = await quotedMsg.reply(text);
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return this.toSentMessageResult(msg, 'replyToMessage', chatId);
   }
 
   async forwardMessage(fromChatId: string, toChatId: string, messageId: string): Promise<MessageResult> {
@@ -914,6 +925,24 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   /* eslint-enable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
+
+  /**
+   * Build a MessageResult from what whatsapp-web.js returned for a send call.
+   * Throws a clear error instead of a TypeError when the library returns nothing.
+   */
+  private toSentMessageResult(msg: Message | undefined | null, operation: string, chatId: string): MessageResult {
+    const id = serializeWaId(msg?.id);
+    if (!msg || !id) {
+      this.logger.error(`${operation}: sendMessage returned ${msg ? 'a message without id' : String(msg)}`, undefined, {
+        chatId,
+      });
+      throw new WhatsAppSendUnconfirmedError(operation, chatId);
+    }
+    return {
+      id,
+      timestamp: msg.timestamp,
+    };
+  }
 
   private ensureReady(): void {
     if (this.status !== EngineStatus.READY || !this.client) {
