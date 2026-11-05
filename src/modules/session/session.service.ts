@@ -57,6 +57,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
       SessionStatus.AUTHENTICATING,
     ];
 
+    // Sesiones que estaban conectadas antes del reinicio: se vuelven a arrancar solas
+    // (sin QR, con la sesion guardada). Se desactiva con SESSION_AUTO_START=false.
+    const wereReady =
+      (await this.sessionRepository.find({
+        where: { status: In([SessionStatus.READY, SessionStatus.AUTHENTICATING]) },
+      })) ?? [];
+
     const result = await this.sessionRepository.update(
       { status: In(activeStatuses) },
       { status: SessionStatus.DISCONNECTED },
@@ -67,6 +74,21 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
         action: 'startup_reset',
         affected: result.affected,
       });
+    }
+
+    if (process.env.SESSION_AUTO_START !== 'false' && wereReady.length > 0) {
+      const timer = setTimeout(() => {
+        for (const session of wereReady) {
+          this.logger.log(`Auto-starting session ${session.name} after restart`, {
+            sessionId: session.id,
+            action: 'auto_start',
+          });
+          this.start(session.id).catch((error: Error) =>
+            this.logger.error(`Auto-start failed for session ${session.name}: ${error.message}`, error.stack),
+          );
+        }
+      }, 5000);
+      timer.unref?.();
     }
   }
 

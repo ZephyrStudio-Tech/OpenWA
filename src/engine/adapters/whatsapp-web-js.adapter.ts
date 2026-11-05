@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { Client, LocalAuth, MessageMedia, Message } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode';
 import * as path from 'path';
+import * as fs from 'fs';
 import {
   IWhatsAppEngine,
   EngineStatus,
@@ -92,6 +93,24 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   private readonly logger = createLogger('WhatsAppWebJsAdapter');
 
+  /**
+   * Chromium deja SingletonLock/SingletonSocket/SingletonCookie en el perfil. Si el
+   * contenedor anterior murio sin cerrar el navegador (redespliegue, reinicio), el
+   * perfil queda "en uso por otro equipo" y Chromium no arranca (codigo 21). En este
+   * contenedor solo hay un navegador por sesion, asi que esos ficheros son siempre
+   * restos del anterior y se pueden borrar antes de lanzar.
+   */
+  private removeStaleChromiumLocks(): void {
+    const profileDir = path.resolve(this.config.sessionDataPath, `session-${this.config.sessionId}`);
+    for (const name of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      try {
+        fs.rmSync(path.join(profileDir, name), { force: true });
+      } catch (error) {
+        this.logger.warn(`No se pudo borrar ${name}: ${(error as Error).message}`);
+      }
+    }
+  }
+
   async initialize(callbacks: EngineEventCallbacks): Promise<void> {
     this.callbacks = callbacks;
     this.setStatus(EngineStatus.INITIALIZING);
@@ -115,6 +134,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           `Using proxy: ${this.config.proxy.type}://${this.config.proxy.url.replace(/:[^:@]*@/, ':***@')}`,
         );
       }
+
+      this.removeStaleChromiumLocks();
 
       this.client = new Client({
         authStrategy: new LocalAuth({
