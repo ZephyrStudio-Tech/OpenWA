@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
+# Copy package files (vendor/ holds the pinned whatsapp-web.js tarball)
 COPY package*.json ./
+COPY vendor/ ./vendor/
 
 # Install all dependencies (including devDependencies for build)
 RUN npm ci
@@ -60,8 +61,9 @@ RUN groupadd -r openwa && useradd -r -g openwa openwa
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files (vendor/ holds the pinned whatsapp-web.js tarball)
 COPY package*.json ./
+COPY vendor/ ./vendor/
 
 # Install production dependencies only
 RUN npm ci --omit=dev && npm cache clean --force

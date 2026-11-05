@@ -1,4 +1,4 @@
-import { WhatsAppWebJsAdapter, serializeWaId } from './whatsapp-web-js.adapter';
+import { WhatsAppWebJsAdapter, WhatsAppSendUnconfirmedError, serializeWaId } from './whatsapp-web-js.adapter';
 import { EngineStatus } from '../interfaces/whatsapp-engine.interface';
 
 describe('WhatsAppWebJsAdapter send results', () => {
@@ -34,20 +34,18 @@ describe('WhatsAppWebJsAdapter send results', () => {
     });
   });
 
-  it('treats an undefined result as sent without confirmation (no TypeError, no failure)', async () => {
+  it('throws a clear error (not a TypeError) when sendMessage resolves undefined', async () => {
     sendMessage.mockResolvedValue(undefined);
 
-    const r = await adapter.sendTextMessage(chatId, 'hola');
-    expect(r.id).toMatch(/^unconfirmed_\d+$/);
-    expect(typeof r.timestamp).toBe('number');
+    const promise = adapter.sendTextMessage(chatId, 'hola');
+    await expect(promise).rejects.toBeInstanceOf(WhatsAppSendUnconfirmedError);
+    await expect(promise).rejects.toThrow(/did not return the sent message for sendTextMessage to 34600000000@c\.us/);
   });
 
-  it('does the same when the message comes back without id', async () => {
+  it('throws the same clear error when the message comes back without id', async () => {
     sendMessage.mockResolvedValue({ id: {}, timestamp: 1 });
 
-    await expect(adapter.sendTextMessage(chatId, 'hola')).resolves.toMatchObject({
-      id: expect.stringMatching(/^unconfirmed_/),
-    });
+    await expect(adapter.sendTextMessage(chatId, 'hola')).rejects.toBeInstanceOf(WhatsAppSendUnconfirmedError);
   });
 });
 

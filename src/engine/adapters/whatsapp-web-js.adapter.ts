@@ -958,15 +958,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private toSentMessageResult(msg: Message | undefined | null, operation: string, chatId: string): MessageResult {
     const id = serializeWaId(msg?.id);
     if (!msg || !id) {
-      // whatsapp-web.js 1.34.7 con el WhatsApp Web de despues de julio de 2026 entrega
-      // el mensaje pero devuelve undefined (cambio de _serialized a $1, arreglado en su
-      // rama main sin publicar). Se da por enviado sin identificador: tratarlo como
-      // fallo hacia que el TPV lo marcara como no enviado y lo reintentara (duplicados).
-      this.logger.warn(`${operation}: enviado sin confirmacion de WhatsApp (sin id)`, { chatId });
-      return {
-        id: `unconfirmed_${Date.now()}`,
-        timestamp: Math.floor(Date.now() / 1000),
-      };
+      this.logger.error(`${operation}: sendMessage returned ${msg ? 'a message without id' : String(msg)}`, undefined, {
+        chatId,
+      });
+      throw new WhatsAppSendUnconfirmedError(operation, chatId);
     }
     return {
       id,
